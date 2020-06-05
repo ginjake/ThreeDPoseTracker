@@ -33,16 +33,26 @@ public class UIScript : MonoBehaviour
     private Button btnSourceDevice;
     private Text txtFPS;
 
+    public RawImage BackgroundImage;
+    public Texture BackgroundTexture;
+    public Camera Maincamera;
+
     private float AppVer;
 
-    private MessageBoxScript message;
+    public MessageBoxScript message;
+
+    private VRInputEmulatorWrapper vrInputEmulator = null;
+    private List<VirtualController> virtualControllers = new List<VirtualController>();
+    private List<VirtualController> virtualTrackers = new List<VirtualController>();
+    private bool VRChat = false;
+    private bool VRChatMotion = false;
 
     private void Awake()
     {
-        AppVer = PlayerPrefs.GetFloat("AppVer", 0.1f);
+        AppVer = PlayerPrefs.GetFloat("AppVer", 0.11f);
         var configs = PlayerPrefs.GetString("Configuration", "");
         string[] cCol = configs.Split(',');
-        if (cCol.Length == 9)
+        if (cCol.Length == 15)
         {
             int.TryParse(cCol[0], out configurationSetting.ShowSource);
             int.TryParse(cCol[1], out configurationSetting.ShowInput);
@@ -53,11 +63,22 @@ public class UIScript : MonoBehaviour
             float.TryParse(cCol[6], out configurationSetting.SourceCutY);
             float.TryParse(cCol[7], out configurationSetting.LowPassFilter);
             int.TryParse(cCol[8], out configurationSetting.TrainedModel);
+
+            int.TryParse(cCol[9], out configurationSetting.ShowBackground);
+            configurationSetting.BackgroundFile = cCol[10];
+            float.TryParse(cCol[11], out configurationSetting.BackgroundScale);
+            int.TryParse(cCol[12], out configurationSetting.BackgroundR);
+            int.TryParse(cCol[13], out configurationSetting.BackgroundG);
+            int.TryParse(cCol[14], out configurationSetting.BackgroundB);
         }
         else
         {
             SaveConfiguration(configurationSetting);
         }
+
+        message = GameObject.Find("pnlMessage").GetComponent<MessageBoxScript>();
+        message.Init();
+        message.Hide();
     }
 
     void Start()
@@ -99,14 +120,10 @@ public class UIScript : MonoBehaviour
         configuration.Init();
         configuration.gameObject.SetActive(false);
 
-        message = GameObject.Find("pnlMessage").GetComponent<MessageBoxScript>();
-        message.Init();
-        message.Hide();
-
         ReflectConfiguration(configurationSetting);
 
         var settings = PlayerPrefs.GetString("AvatarSettings", "");
-
+        //settings = "";
         // Decode Avatar Setting
         string[] asStr = settings.Split(';');
         foreach (var s in asStr)
@@ -202,6 +219,7 @@ public class UIScript : MonoBehaviour
             setting.Avatar.SetNose(setting.FaceOriX, setting.FaceOriY, setting.FaceOriZ);
             AvatarList.Add(setting);
             barracudaRunner.InitVNectModel(setting.Avatar);
+            setting.Avatar.PoseUpdated = PoseUpdated;
 
             setting = new AvatarSetting()
             {
@@ -212,6 +230,18 @@ public class UIScript : MonoBehaviour
             setting.Avatar.SetNose(setting.FaceOriX, setting.FaceOriY, setting.FaceOriZ);
             AvatarList.Add(setting);
             barracudaRunner.InitVNectModel(setting.Avatar);
+            setting.Avatar.PoseUpdated = PoseUpdated;
+
+            setting = new AvatarSetting()
+            {
+                AvatarType = -3,
+                AvatarName = "Tait",
+                Avatar = GameObject.Find("Tait").GetComponent<VNectModel>(),
+            };
+            setting.Avatar.SetNose(setting.FaceOriX, setting.FaceOriY, setting.FaceOriZ);
+            AvatarList.Add(setting);
+            barracudaRunner.InitVNectModel(setting.Avatar);
+            setting.Avatar.PoseUpdated = PoseUpdated;
         }
 
         avatars.options.Clear();
@@ -235,10 +265,17 @@ public class UIScript : MonoBehaviour
                         setting.Avatar = GameObject.Find("YukihikoAoyagi").GetComponent<VNectModel>();
                         break;
 
+                    case -3:
+                        setting.Avatar = GameObject.Find("Tait").GetComponent<VNectModel>();
+                        SetVRMBounds(setting.Avatar.ModelObject.transform);
+
+                        break;
+
                 }
 
                 setting.Avatar.SetNose(setting.FaceOriX, setting.FaceOriY, setting.FaceOriZ);
                 barracudaRunner.InitVNectModel(setting.Avatar);
+                setting.Avatar.PoseUpdated = PoseUpdated;
             }
         }
         avatars.value = 0;
@@ -254,6 +291,38 @@ public class UIScript : MonoBehaviour
         }
         avatars.value = v;
     }
+
+    bool triggerDown = false;
+    public float x0 = -0.8f;
+    public float y0 = 1.3f;
+    public float z0 = 0f;
+    public float yaw0 = 90f;
+    public float pitch0 = 0f;
+    public float roll0 = 0f;
+    public float x1 = 0.8f;
+    public float y1 = 1.3f;
+    public float z1 = 0f;
+    public float yaw1 = -90f;
+    public float pitch1 = 0f;
+    public float roll1 = 0f;
+    public float x2 = 0f;
+    public float y2 = 0.8f;
+    public float z2 = 0f;
+    public float yaw2 = 0f;
+    public float pitch2 = 0f;
+    public float roll2 = 0f;
+    public float x3 = -0.18f;
+    public float y3 = 0f;
+    public float z3 = 0f;
+    public float yaw3 = 0f;
+    public float pitch3 = 0f;
+    public float roll3 = 0f;
+    public float x4 = 0.18f;
+    public float y4 = 0f;
+    public float z4 = 0f;
+    public float yaw4 = 0f;
+    public float pitch4 = 0f;
+    public float roll4 = 0f;
 
     void Update()
     {
@@ -275,6 +344,126 @@ public class UIScript : MonoBehaviour
         {
             ifFrame.text = barracudaRunner.videoCapture.VideoPlayer.frame.ToString();
             txFrameCount.text = barracudaRunner.videoCapture.VideoPlayer.frameCount.ToString();
+        }
+
+        if(VRChat)
+        {
+            if (Input.GetKey(KeyCode.Return))
+            {
+                if (virtualControllers.Count == 2)
+                {
+                    virtualControllers[1].ButtonEvent("press", VRInputEmulatorWrapper.EVRButtonId.k_EButton_System, 50);
+                }
+            }
+            else if (Input.GetKey(KeyCode.Escape))
+            {
+                if (virtualControllers.Count == 2)
+                {
+                    virtualControllers[0].ButtonEvent("press", VRInputEmulatorWrapper.EVRButtonId.k_EButton_ApplicationMenu, 50);
+                }
+            }
+            else if (Input.GetKey(KeyCode.P))
+            {
+                if (VRChatMotion)
+                {
+                    VRChatMotion = false;
+                    if (virtualControllers.Count == 2)
+                    {
+                        virtualControllers[0].SetDevicePosition(-0.8f, 1.3f, 0f);
+                        virtualControllers[0].SetDeviceRotation(90f, 0f, 0f);
+                        virtualControllers[1].SetDevicePosition(0.8f, 1.3f, 0f);
+                        virtualControllers[1].SetDeviceRotation(-90f, 0f, 0f);
+                    }
+
+                    if (virtualTrackers.Count == 5)
+                    {
+                        virtualTrackers[0].SetDevicePosition(0f, 0.8f, 0f);
+                        virtualTrackers[1].SetDevicePosition(-0.18f, 0f, 0f);
+                        virtualTrackers[2].SetDevicePosition(0.18f, 0f, 0f);
+                    }
+                }
+                else
+                {
+                    VRChatMotion = true;
+                }
+            }
+            else if (Input.GetKey(KeyCode.O))
+            {
+                if (!VRChatMotion)
+                {
+                    if (virtualControllers.Count == 2)
+                    {
+                        virtualControllers[0].SetDevicePosition(x0, y0, z0);
+                        virtualControllers[0].SetDeviceRotation(yaw0, pitch0, roll0);
+                        virtualControllers[1].SetDevicePosition(x1, y1, z1);
+                        virtualControllers[1].SetDeviceRotation(yaw1, pitch1, roll1);
+                    }
+                    if (virtualTrackers.Count == 5)
+                    {
+                        virtualTrackers[0].SetDevicePosition(x2, y2, z2);
+                        virtualTrackers[0].SetDeviceRotation(yaw2, pitch2, roll2);
+                        virtualTrackers[1].SetDevicePosition(x3, y3, z3);
+                        virtualTrackers[1].SetDeviceRotation(yaw3, pitch3, roll3);
+                        virtualTrackers[2].SetDevicePosition(x4, y4, z4);
+                        virtualTrackers[2].SetDeviceRotation(yaw4, pitch4, roll4);
+                    }
+                }
+            }
+            else if (Input.GetKey(KeyCode.Z))
+            {
+                if (virtualControllers.Count == 2)
+                {
+                    if (!triggerDown)
+                    {
+                        triggerDown = true;
+                        virtualControllers[0].AxisEvent(1, "1", "0");
+                        virtualControllers[1].AxisEvent(1, "1", "0");
+                    }
+                    else
+                    {
+                        triggerDown = false;
+                        virtualControllers[0].AxisEvent(1, "0", "0");
+                        virtualControllers[1].AxisEvent(1, "0", "0");
+                    }
+                }
+            }
+            else if (Input.GetKey(KeyCode.A))
+            {
+                VRChatMotion = false;
+                if (!VRChatMotion)
+                {
+                    if (virtualControllers.Count == 2)
+                    {
+                        virtualControllers[0].SetDevicePosition(-0.8f, 1.3f, 0f);
+                        virtualControllers[0].SetDeviceRotation(90f, 0f, 0f);
+                        virtualControllers[1].SetDevicePosition(0.8f, 1.3f, 0f);
+                        virtualControllers[1].SetDeviceRotation(40f, 23f, 0f);
+                    }
+
+                    if (virtualTrackers.Count == 3)
+                    {
+                        virtualTrackers[2].SetDevicePosition(0f, 0.8f, 0f);
+                        virtualTrackers[3].SetDevicePosition(-0.18f, 0f, 0f);
+                        virtualTrackers[4].SetDevicePosition(0.18f, 0f, 0f);
+                    }
+                }
+            }
+            else if (Input.GetKey(KeyCode.Space))
+            {
+                if (virtualControllers.Count == 2)
+                {
+                    if (!triggerDown)
+                    {
+                        triggerDown = true;
+                        virtualControllers[1].AxisEvent(1, "1", "0");
+                    }
+                    else
+                    {
+                        triggerDown = false;
+                        virtualControllers[1].AxisEvent(1, "0", "0");
+                    }
+                }
+            }
         }
     }
 
@@ -308,6 +497,48 @@ public class UIScript : MonoBehaviour
         }
     }
 
+    private void SetBackgroundImage(ConfigurationSetting config)
+    {
+        if(config.ShowBackground == 0)
+        {
+            BackgroundImage.gameObject.SetActive(false);
+        }
+        else
+        {
+            BackgroundImage.gameObject.SetActive(true);
+
+            Texture texture;
+
+            if (config.BackgroundFile != string.Empty)
+            {
+                texture = PngToTex2D(config.BackgroundFile);
+            }
+            else
+            {
+                texture = BackgroundTexture;
+            }
+
+            BackgroundImage.texture = texture;
+            var rt = BackgroundImage.GetComponent< RectTransform>();
+            rt.sizeDelta = new Vector2(texture.width, texture.height);
+            BackgroundImage.rectTransform.localScale = new Vector3(config.BackgroundScale, config.BackgroundScale, config.BackgroundScale);
+        }
+
+        Maincamera.backgroundColor = new Color(config.BackgroundR / 255f, config.BackgroundG / 255f, config.BackgroundB / 255f );
+    }
+
+    Texture2D PngToTex2D(string path)
+    {
+        BinaryReader bin = new BinaryReader(new FileStream(path, FileMode.Open, FileAccess.Read));
+        byte[] rb = bin.ReadBytes((int)bin.BaseStream.Length);
+        bin.Close();
+        int pos = 16, width = 0, height = 0;
+        for (int i = 0; i < 4; i++) width = width * 256 + rb[pos++];
+        for (int i = 0; i < 4; i++) height = height * 256 + rb[pos++];
+        Texture2D texture = new Texture2D(width, height);
+        texture.LoadImage(rb);
+        return texture;
+    }
     private void ReflectConfiguration(ConfigurationSetting config)
     {
         barracudaRunner.videoCapture.VideoScreen.gameObject.SetActive(config.ShowSource == 1);
@@ -316,6 +547,8 @@ public class UIScript : MonoBehaviour
         barracudaRunner.videoCapture.VideoPlayer.isLooping = (config.RepeatPlayback == 1);
         barracudaRunner.videoCapture.ResetScale(config.SourceCutScale, config.SourceCutX, config.SourceCutY);
         barracudaRunner.Smooth = config.LowPassFilter;
+
+        SetBackgroundImage(config);
     }
 
     private void SaveConfiguration(ConfigurationSetting config)
@@ -493,6 +726,7 @@ public class UIScript : MonoBehaviour
             DiactivateAvatars();
             avatars.options.Add(new Dropdown.OptionData(setting.AvatarName));
             barracudaRunner.InitVNectModel(setting.Avatar);
+            setting.Avatar.PoseUpdated = PoseUpdated;
         }
     }
 
@@ -535,6 +769,7 @@ public class UIScript : MonoBehaviour
 
     public void onRecord()
     {
+
   /*      if (!isRecording)
         {
             var extensions = new[]
@@ -593,9 +828,298 @@ public class UIScript : MonoBehaviour
         */
     }
 
+    public void onVRChat()
+    {
+        if (vrInputEmulator == null)
+        {
+            vrInputEmulator = new VRInputEmulatorWrapper();
+            var res = vrInputEmulator.Connect();
+            if (vrInputEmulator.Connect() > 0)
+            {
+                StartCoroutine(AddTrackedController());
+            }
+        }
+
+        AvatarList[avatars.value].Avatar.StartCapture();
+        VRChat = true;
+        VRChatMotion = true;
+    }
+
+
+    IEnumerator AddTrackedController()
+    {
+        var cnt = 5;
+        /**/
+        AddVirtualController("OVRIE_Controller_L", true);
+        while (cnt > 0)
+        {
+            yield return new WaitForSeconds(1);
+            if (virtualControllers[virtualControllers.Count - 1].GetOpenVRDeviceID() >= 0)
+            {
+                break;
+            }
+            cnt--;
+        }
+        if (cnt == 0)
+        {
+            yield break;
+        }
+
+        AddVirtualController("OVRIE_Controller_R", false);
+        cnt = 5;
+        while (cnt > 0)
+        {
+            yield return new WaitForSeconds(1);
+            if (virtualControllers[virtualControllers.Count - 1].GetOpenVRDeviceID() >= 0)
+            {
+                break;
+            }
+            cnt--;
+        }
+        if (cnt == 0)
+        {
+            yield break;
+        }
+        /*  */
+        AddVirtualTracker("OVRIE_Tracker_1");
+        cnt = 5;
+        while (cnt > 0)
+        {
+            yield return new WaitForSeconds(1);
+            if (virtualTrackers[virtualTrackers.Count - 1].GetOpenVRDeviceID() >= 0)
+            {
+                break;
+            }
+            cnt--;
+        }
+        if (cnt == 0)
+        {
+            yield break;
+        }
+
+        AddVirtualTracker("OVRIE_Tracker_2");
+        cnt = 5;
+        while (cnt > 0)
+        {
+            yield return new WaitForSeconds(1);
+            if (virtualTrackers[virtualTrackers.Count - 1].GetOpenVRDeviceID() >= 0)
+            {
+                break;
+            }
+            cnt--;
+        }
+        if (cnt == 0)
+        {
+            yield break;
+        }
+
+        AddVirtualTracker("OVRIE_Tracker_3");
+        cnt = 5;
+        while (cnt > 0)
+        {
+            yield return new WaitForSeconds(1);
+            if (virtualTrackers[virtualTrackers.Count - 1].GetOpenVRDeviceID() >= 0)
+            {
+                break;
+            }
+            cnt--;
+        }
+        if (cnt == 0)
+        {
+            yield break;
+        }
+        /*
+        AddVirtualTracker("OVRIE_Tracker_4");
+        cnt = 5;
+        while (cnt > 0)
+        {
+            yield return new WaitForSeconds(1);
+            if (virtualTrackers[virtualTrackers.Count - 1].GetOpenVRDeviceID() >= 0)
+            {
+                break;
+            }
+            cnt--;
+        }
+        if (cnt == 0)
+        {
+            yield break;
+        }
+
+        AddVirtualTracker("OVRIE_Tracker_5");
+        cnt = 5;
+        while (cnt > 0)
+        {
+            yield return new WaitForSeconds(1);
+            if (virtualTrackers[virtualTrackers.Count - 1].GetOpenVRDeviceID() >= 0)
+            {
+                break;
+            }
+            cnt--;
+        }
+        if (cnt == 0)
+        {
+            yield break;
+        }
+        
+        AddVirtualTracker("OVRIE_Tracker_6");
+        cnt = 5;
+        while (cnt > 0)
+        {
+            yield return new WaitForSeconds(1);
+            if (virtualTrackers[virtualTrackers.Count - 1].GetOpenVRDeviceID() >= 0)
+            {
+                break;
+            }
+            cnt--;
+        }
+        if (cnt == 0)
+        {
+            yield break;
+        }
+
+        AddVirtualTracker("OVRIE_Tracker_7");
+        cnt = 5;
+        while (cnt > 0)
+        {
+            yield return new WaitForSeconds(1);
+            if (virtualTrackers[virtualTrackers.Count - 1].GetOpenVRDeviceID() >= 0)
+            {
+                break;
+            }
+            cnt--;
+        }
+        if (cnt == 0)
+        {
+            yield break;
+        }
+        */
+        if (virtualControllers.Count == 2)
+        {
+            virtualControllers[0].SetDevicePosition(-0.8f, 1.3f, 0f);
+            virtualControllers[0].SetDeviceRotation(90f, 0f, 0f);
+            virtualControllers[1].SetDevicePosition(0.8f, 1.3f, 0f);
+            virtualControllers[1].SetDeviceRotation(-90f, 0f, 0f);
+        }
+
+        if (virtualTrackers.Count == 3)
+        {
+            virtualTrackers[0].SetDevicePosition(0f, 0.85f, 0f);
+            virtualTrackers[1].SetDevicePosition(-0.12f, 0f, 0f);
+            virtualTrackers[2].SetDevicePosition(0.12f, 0f, 0f);
+
+            //virtualTrackers[3].SetDevicePosition(-0.14f, 0.4f, 0f);
+            //virtualTrackers[4].SetDevicePosition(0.14f, 0.4f, 0f);
+            //virtualTrackers[5].SetDevicePosition(-0.8f, 1.3f, 0f);
+            //virtualTrackers[6].SetDevicePosition(0.8f, 1.3f, 0f);
+        }
+    }
+
+    private VirtualController AddVirtualController(string serial, bool isL = true)
+    {
+        var ctrl = new VirtualController(vrInputEmulator);
+        var idL = ctrl.AddTrackedController(serial);
+        if (idL < 0)
+        {
+            idL = ctrl.GetDeviceID();
+            ctrl.GetOpenVRDeviceID();
+        }
+        else
+        {
+            ctrl.SetControllerProperty(isL);
+        }
+
+        virtualControllers.Add(ctrl);
+
+        return ctrl;
+    }
+
+    private VirtualController AddVirtualTracker(string serial)
+    {
+        var ctrl = new VirtualController(vrInputEmulator);
+        var idL = ctrl.AddTrackedController(serial);
+        if (idL < 0)
+        {
+            idL = ctrl.GetDeviceID();
+            ctrl.GetOpenVRDeviceID();
+        }
+        else
+        {
+            ctrl.SetTrackerProperty();
+        }
+
+        virtualTrackers.Add(ctrl);
+
+        return ctrl;
+    }
+
     public void ShowMessage(string msg)
     {
         message.ShowMessage(msg);
+    }
+
+    public void PoseUpdated(VNectModel.JointPoint[] jointPoints)
+    {
+        if (VRChat && VRChatMotion)
+        {
+            if (virtualControllers.Count != 0)
+            {
+                virtualControllers[0].SetDevicePosition(jointPoints[PositionIndex.lHand.Int()].Transform.position);
+                var lHand = jointPoints[PositionIndex.lHand.Int()].Transform.eulerAngles;
+                virtualControllers[0].SetDeviceRotation(90f + lHand.y, lHand.z, lHand.x);
+
+                virtualControllers[1].SetDevicePosition(jointPoints[PositionIndex.rHand.Int()].Transform.position);
+                var rHand = jointPoints[PositionIndex.rHand.Int()].Transform.eulerAngles;
+                virtualControllers[1].SetDeviceRotation(rHand.y - 90f, -rHand.z, rHand.x);
+            }
+
+            if (virtualTrackers.Count != 0)
+            {
+                virtualTrackers[0].SetDevicePosition(jointPoints[PositionIndex.abdomenUpper.Int()].Transform.position);
+                var hip = jointPoints[PositionIndex.hip.Int()].Transform.eulerAngles;
+                // virtualTrackers[0].SetDeviceRotation(180f + hip.y, hip.z, -hip.x);
+                virtualTrackers[0].SetDeviceRotation(hip.y, hip.z, hip.x);
+
+                virtualTrackers[1].SetDevicePosition(jointPoints[PositionIndex.lToe.Int()].Transform.position);
+                var lf = jointPoints[PositionIndex.lToe.Int()].Transform.position - jointPoints[PositionIndex.lFoot.Int()].Transform.position;
+                var lFoot = Quaternion.LookRotation(lf, Vector3.up).eulerAngles;
+                virtualTrackers[1].SetDeviceRotation(lFoot.y, lFoot.x, lFoot.z);
+                //var lFoot = jointPoints[PositionIndex.lFoot.Int()].Transform.eulerAngles;
+                //virtualTrackers[1].SetDeviceRotation(180f + lFoot.y, lFoot.z, lFoot.x);
+
+                virtualTrackers[2].SetDevicePosition(jointPoints[PositionIndex.rToe.Int()].Transform.position);
+                var rf = jointPoints[PositionIndex.rToe.Int()].Transform.position - jointPoints[PositionIndex.rFoot.Int()].Transform.position;
+                var rFoot = Quaternion.LookRotation(rf, Vector3.up).eulerAngles;
+                virtualTrackers[2].SetDeviceRotation(rFoot.y, rFoot.x, rFoot.z);
+                //var rFoot = jointPoints[PositionIndex.rFoot.Int()].Transform.eulerAngles;
+                //virtualTrackers[2].SetDeviceRotation(180f + rFoot.y, rFoot.z, rFoot.x);
+                /*
+                virtualTrackers[3].SetDevicePosition(jointPoints[PositionIndex.lShin.Int()].Transform.position);
+                //var rf = jointPoints[PositionIndex.rToe.Int()].Transform.position - jointPoints[PositionIndex.rFoot.Int()].Transform.position;
+                //svar rFoot = Quaternion.LookRotation(rf, Vector3.up).eulerAngles;
+                var lShin = jointPoints[PositionIndex.lShin.Int()].Transform.eulerAngles;
+                virtualTrackers[3].SetDeviceRotation(180f + lShin.y, lShin.z, lShin.x);
+
+                virtualTrackers[4].SetDevicePosition(jointPoints[PositionIndex.rShin.Int()].Transform.position);
+                //var rf = jointPoints[PositionIndex.rToe.Int()].Transform.position - jointPoints[PositionIndex.rFoot.Int()].Transform.position;
+                //svar rFoot = Quaternion.LookRotation(rf, Vector3.up).eulerAngles;
+                var rShin = jointPoints[PositionIndex.rShin.Int()].Transform.eulerAngles;
+                virtualTrackers[4].SetDeviceRotation(180f + rShin.y, rShin.z, rShin.x);
+                */
+                /*
+                virtualTrackers[5].SetDevicePosition(jointPoints[PositionIndex.lForearmBend.Int()].Transform.position);
+                //var rf = jointPoints[PositionIndex.rToe.Int()].Transform.position - jointPoints[PositionIndex.rFoot.Int()].Transform.position;
+                //svar rFoot = Quaternion.LookRotation(rf, Vector3.up).eulerAngles;
+                var lForearmBend = jointPoints[PositionIndex.lForearmBend.Int()].Transform.eulerAngles;
+                virtualTrackers[5].SetDeviceRotation(180f + lForearmBend.y, lForearmBend.z, lForearmBend.x);
+
+                virtualTrackers[6].SetDevicePosition(jointPoints[PositionIndex.rForearmBend.Int()].Transform.position);
+                //var rf = jointPoints[PositionIndex.rToe.Int()].Transform.position - jointPoints[PositionIndex.rFoot.Int()].Transform.position;
+                //svar rFoot = Quaternion.LookRotation(rf, Vector3.up).eulerAngles;
+                var rForearmBend = jointPoints[PositionIndex.rForearmBend.Int()].Transform.eulerAngles;
+                virtualTrackers[6].SetDeviceRotation(180f + rForearmBend.y, rForearmBend.z, rForearmBend.x);
+                */
+            }
+        }
     }
 
     void OnDisable()
@@ -711,6 +1235,14 @@ public class ConfigurationSetting
     public float LowPassFilter;
     public int TrainedModel;
 
+    public int ShowBackground;
+    public string BackgroundFile;
+    public float BackgroundScale;
+    public int BackgroundR;
+    public int BackgroundG;
+    public int BackgroundB;
+
+
     public ConfigurationSetting()
     {
         ShowSource = 1;
@@ -722,6 +1254,13 @@ public class ConfigurationSetting
         SourceCutY = 0f;
         LowPassFilter = 0.1f;
         TrainedModel = 0;
+
+        ShowBackground = 1;
+        BackgroundFile = "";
+        BackgroundScale = 1f;
+        BackgroundR = 0;
+        BackgroundG = 255;
+        BackgroundB = 0;
     }
 
     public ConfigurationSetting Clone()
@@ -737,6 +1276,12 @@ public class ConfigurationSetting
             SourceCutY = SourceCutY,
             LowPassFilter = LowPassFilter,
             TrainedModel = TrainedModel,
+            ShowBackground = ShowBackground,
+            BackgroundFile = BackgroundFile,
+            BackgroundScale = BackgroundScale,
+            BackgroundR = BackgroundR,
+            BackgroundG = BackgroundG,
+            BackgroundB = BackgroundB,
         };
     }
 
@@ -744,6 +1289,8 @@ public class ConfigurationSetting
     {
         return ShowSource.ToString() + "," + ShowInput.ToString() + "," + SkipOnDrop.ToString() + "," + RepeatPlayback.ToString()
             + "," + SourceCutScale.ToString() + "," + SourceCutX.ToString() + "," + SourceCutY.ToString() + "," + LowPassFilter.ToString()
-            + "," + TrainedModel.ToString();
+            + "," + TrainedModel.ToString()
+            + "," + ShowBackground.ToString() + "," + BackgroundFile + "," + BackgroundScale.ToString()
+            + "," + BackgroundR.ToString() + "," + BackgroundG.ToString() + "," + BackgroundB.ToString();
     }
 }

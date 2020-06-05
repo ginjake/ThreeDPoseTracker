@@ -237,7 +237,7 @@ public class AvatarSettingScript : MonoBehaviour
     public void onOK()
     {
         var msg = SetSetting();
-        if(msg != "")
+        if (msg != "")
         {
             currentUI.ShowMessage(msg);
         }
@@ -245,6 +245,19 @@ public class AvatarSettingScript : MonoBehaviour
         {
             currentUI.SetAvatar(currentSetting);
             this.gameObject.SetActive(false);
+        }
+    }
+
+    public void onApply()
+    {
+        var msg = SetSetting();
+        if (msg != "")
+        {
+            currentUI.ShowMessage(msg);
+        }
+        else
+        {
+            currentUI.SetAvatar(currentSetting);
         }
     }
 

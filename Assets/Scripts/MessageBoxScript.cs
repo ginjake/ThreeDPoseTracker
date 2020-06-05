@@ -7,6 +7,11 @@ public class MessageBoxScript : MonoBehaviour
 {
     private Text Message;
 
+    private void Awake()
+    {
+        Init();
+    }
+
     public void Init()
     {
         Message = GameObject.Find("Message").GetComponent<Text>();

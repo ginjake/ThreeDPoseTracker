@@ -101,6 +101,10 @@ public class CameraMover : MonoBehaviour
         }
         else if(Input.GetMouseButtonDown(1))
         {
+            mainCamera.fieldOfView = 60;
+            CameraAngleCnt = 0;
+            camTransform.position = initialCamposition;
+            /*
             uiScript.NextAvatar();
             var headpos = barracudaRunner.GetHeadPosition();
             if (CameraAngleCnt == 1)
@@ -127,6 +131,7 @@ public class CameraMover : MonoBehaviour
                 CameraAngleCnt = 0;
                 camTransform.position = initialCamposition;
             }
+            */
         }
 
         // マウスホイールの回転値を変数 scroll に渡す

@@ -1,5 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using UnityEngine;
 
 public enum PositionIndex : int
@@ -126,6 +128,12 @@ public class VNectModel : MonoBehaviour
     private bool UpperBodyMode = false;
     private float UpperBodyF = 1f;
 
+    private bool isCapture = false;
+    private int captureCnt = 0;
+
+    public delegate void PoseUpdatedDelegate(JointPoint[] jointPoints);
+    public PoseUpdatedDelegate PoseUpdated;
+
 
     public JointPoint[] Init(int inputImageSize)
     {
@@ -239,6 +247,7 @@ public class VNectModel : MonoBehaviour
         jointPoints[PositionIndex.neck.Int()].Child = jointPoints[PositionIndex.head.Int()];
         //jointPoints[PositionIndex.head.Int()].Child = jointPoints[PositionIndex.Nose.Int()];
         //jointPoints[PositionIndex.hip.Int()].Child = jointPoints[PositionIndex.spine.Int()];
+
 
         // Line Child Settings
         // Right Arm
@@ -407,6 +416,16 @@ public class VNectModel : MonoBehaviour
         UpperBodyF = upper ? 0f : 1f;
     }
 
+    public void StartCapture()
+    {
+        isCapture = true;
+    }
+
+    public void StopCapture()
+    {
+        isCapture = false;
+    }
+
     private float tallHeadNeck;
     private float tallNeckSpine;
     private float tallSpineCrotch;
@@ -414,6 +433,8 @@ public class VNectModel : MonoBehaviour
     private float tallShin;
     public float EstimatedScore;
     private float VisibleThreshold = 0.3f;
+
+    public bool save = false;
 
     public void PoseUpdate()
     {
@@ -577,6 +598,39 @@ public class VNectModel : MonoBehaviour
             sk.Line.SetPosition(0, new Vector3(s.Pos3D.x * SkeletonScale + SkeletonX, s.Pos3D.y * SkeletonScale + SkeletonY, s.Pos3D.z * SkeletonScale + SkeletonZ));
             sk.Line.SetPosition(1, new Vector3(e.Pos3D.x * SkeletonScale + SkeletonX, e.Pos3D.y * SkeletonScale + SkeletonY, e.Pos3D.z * SkeletonScale + SkeletonZ));
         }
+
+        if (save)
+        {
+            var str = ToStr(PositionIndex.rShldrBend) + ToStr(PositionIndex.rForearmBend) + ToStr(PositionIndex.rHand) + ToStr(PositionIndex.rThumb2) + ToStr(PositionIndex.rMid1) +
+            ToStr(PositionIndex.lShldrBend) + ToStr(PositionIndex.lForearmBend) + ToStr(PositionIndex.lHand) + ToStr(PositionIndex.lThumb2) + ToStr(PositionIndex.lMid1) +
+            ToStr(PositionIndex.lEar) + ToStr(PositionIndex.lEye) + ToStr(PositionIndex.rEar) + ToStr(PositionIndex.rEye) + ToStr(PositionIndex.Nose) +
+            ToStr(PositionIndex.rThighBend) + ToStr(PositionIndex.rShin) + ToStr(PositionIndex.rFoot) + ToStr(PositionIndex.rToe) +
+            ToStr(PositionIndex.lThighBend) + ToStr(PositionIndex.lShin) + ToStr(PositionIndex.lFoot) + ToStr(PositionIndex.lToe) + ToStr(PositionIndex.abdomenUpper, true);
+            SaveCsv(@"D:\Github\ThreeDPoseTracker\Assets\StreamingAssets\data.csv", str);
+        }
+
+        if (isCapture)
+        {
+            PoseUpdated(jointPoints);
+        }
+    }
+
+
+    string ToStr(PositionIndex index, bool endF = false)
+    {
+        var pos = jointPoints[index.Int()].Pos3D / 448f;
+        return pos.x.ToString("0.#########") + "," + pos.y.ToString("0.#########") + "," + pos.z.ToString("0.#########") + (!endF ? "," : "");
+    }
+
+    public void SaveCsv(string fileName, string txt)
+    {
+        StreamWriter sw;
+        FileInfo fi;
+        fi = new FileInfo(fileName);
+        sw = fi.AppendText();
+        sw.WriteLine(txt);
+        sw.Flush();
+        sw.Close();
     }
 
     Vector3 TriangleNormal(Vector3 a, Vector3 b, Vector3 c)

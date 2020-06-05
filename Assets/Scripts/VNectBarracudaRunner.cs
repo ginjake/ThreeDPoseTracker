@@ -1,6 +1,6 @@
 ﻿using UnityEngine;
 using UnityEngine.UI;
-using Barracuda;
+using Unity.Barracuda;
 using System.Collections;
 using System.Collections.Generic;
 using System;
@@ -65,8 +65,12 @@ public class VNectBarracudaRunner : MonoBehaviour
     public bool User3Input;
     public bool UpperBodyMode;
 
+    private UIScript ui;
+
     private void Start()
     {
+        ui = GameObject.Find("UICanvas").GetComponent<UIScript>();
+
         if (DebugMode)
         {
             if(User3Input)
@@ -92,6 +96,7 @@ public class VNectBarracudaRunner : MonoBehaviour
             if (!File.Exists(streamingPath))
             {
                 ModelQuality = 0;
+                ui.ShowMessage("ERROR!!\r\n\r\nHighQualityTrainedModel.nn file is not found.\r\nPlease download this file.\r\n\r\nsee:\r\nhttps://github.com/digital-standard/ThreeDPoseTracker");
             }
 
             if (ModelQuality == 0)
@@ -113,11 +118,12 @@ public class VNectBarracudaRunner : MonoBehaviour
         HeatMapCol_Half = HeatMapCol / 2;
         HeatMapCol_Squared = HeatMapCol * HeatMapCol;
         HeatMapCol_Cube = HeatMapCol * HeatMapCol * HeatMapCol;
-        HeatMapCol_JointNum = HeatMapCol*JointNum;
+        HeatMapCol_JointNum = HeatMapCol * JointNum;
         heatMap2D = new float[JointNum * HeatMapCol_Squared];
         offset2D = new float[JointNum * HeatMapCol_Squared * 2];
         heatMap3D = new float[JointNum * HeatMapCol_Cube];
         offset3D = new float[JointNum * HeatMapCol_Cube * 3];
+
         InputImageSizeF = InputImageSize ;
         InputImageSizeHalf = InputImageSizeF / 2f ;
         unit = 1f / (float)HeatMapCol;
@@ -238,9 +244,9 @@ public class VNectBarracudaRunner : MonoBehaviour
         // Get data from outputs
         //heatMap2D = b_outputs[0].data.Download(b_outputs[0].data.GetMaxCount());
         //offset2D = b_outputs[1].data.Download(b_outputs[1].data.GetMaxCount());
-        offset3D = b_outputs[2].data.Download(b_outputs[2].data.GetMaxCount());
-        heatMap3D = b_outputs[3].data.Download(b_outputs[3].data.GetMaxCount());
-        
+        offset3D = b_outputs[2].data.Download(b_outputs[2].shape);
+        heatMap3D = b_outputs[3].data.Download(b_outputs[3].shape);
+
         // Release outputs
         for (var i = 2; i < b_outputs.Length; i++)
         {
@@ -300,8 +306,8 @@ public class VNectBarracudaRunner : MonoBehaviour
             // Get data from outputs
             //heatMap2D = b_outputs[0].data.Download(b_outputs[0].data.GetMaxCount());
             //offset2D = b_outputs[1].data.Download(b_outputs[1].data.GetMaxCount());
-            offset3D = b_outputs[2].data.Download(b_outputs[2].data.GetMaxCount());
-            heatMap3D = b_outputs[3].data.Download(b_outputs[3].data.GetMaxCount());
+            offset3D = b_outputs[2].data.Download(b_outputs[2].shape);
+            heatMap3D = b_outputs[3].data.Download(b_outputs[3].shape);
 
             PredictPose();
 
@@ -347,6 +353,7 @@ public class VNectBarracudaRunner : MonoBehaviour
             jointPoints[j].Now3D.z = ((offset3D[maxYIndex * cubeOffsetSquared + maxXIndex * cubeOffsetLinear + (j + JointNum_Squared) * HeatMapCol + maxZIndex] + 0.5f + (float)(maxZIndex - HeatMapCol_Half)) / (float)HeatMapCol) * InputImageSizeF;
             //jointPoints[j].Visibled = jointPoints[j].score3D > 0.2f;
         }
+
 
         EstimatedScore = score / JointNum;
 
