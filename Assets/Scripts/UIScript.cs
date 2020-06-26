@@ -242,8 +242,8 @@ public class UIScript : MonoBehaviour
             setting = new AvatarSetting()
             {
                 AvatarType = -2,
-                AvatarName = "yukihiko-chan",
-                Avatar = GameObject.Find("YukihikoAoyagi").GetComponent<VNectModel>(),
+                AvatarName = "Airis_ver1.01",
+                Avatar = GameObject.Find("Airis_ver1.01").GetComponent<VNectModel>(),
             };
             setting.Avatar.SetNose(setting.FaceOriX, setting.FaceOriY, setting.FaceOriZ);
             AvatarList.Add(setting);
@@ -269,7 +269,7 @@ public class UIScript : MonoBehaviour
                         break;
 
                     case -2:
-                        setting.Avatar = GameObject.Find("YukihikoAoyagi").GetComponent<VNectModel>();
+                        setting.Avatar = GameObject.Find("Airis_ver1.01").GetComponent<VNectModel>();
                         break;
                 }
 
